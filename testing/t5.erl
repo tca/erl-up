@@ -41,11 +41,11 @@ init_handle_client(Sock) ->
             tcp_bridge(Sock, Alice)
     end.
 
-run_alice() ->
+run_alice(Port) ->
     Alice = fun() -> t4:run_alice() end,
-    spawn(fun() -> init_server(5555, Alice) end).
+    spawn(fun() -> init_server(Port, Alice) end).
 
-run_bob() ->
-    Fake_Alice = spawn(fun() -> init_client("localhost", 5555) end),
+run_bob(Host, Port) ->
+    Fake_Alice = spawn(fun() -> init_client(Host, Port) end),
     spawn(fun() ->  t4:run_bob(Fake_Alice) end),
     Fake_Alice.
