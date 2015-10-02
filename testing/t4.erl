@@ -82,6 +82,7 @@ run_bob1(Alice, Alice_EPubk, ESeck, Bob_Secret, Bob_Commit_Key, Nonce) ->
             Alice ! Package1_Enc,
 
             Secret = bin_bxor(Alice_Secret, Bob_Secret),
+            io:format("secret: ~p~n", [Secret]),
             run_bob2(Secret, Sec_Nonce, Bob_Commit_Key)
     end.
 
@@ -97,7 +98,7 @@ run_alice2(Bob, ESeck, Bob_EPubk, Bob_Commit, Alice_Secret, Sec_Nonce, Nonce1) -
               Bob_Commit_Key:Bob_Commit_Key_Size/binary>> = Package1,
             Bob_Commit = enacl:hash(<<Bob_EPubk/binary, Bob_Secret/binary, Bob_Commit_Key/binary>>),
             Secret = bin_bxor(Alice_Secret, Bob_Secret),
-
+            io:format("secret: ~p~n", [Secret]),
             Sec_Nonce2 = enacl:randombytes(enacl:secretbox_nonce_size()),
             Msg = <<Bob_Commit_Key:8/binary, Sec_Nonce2:SECRETBOX_NONCE_SIZE/binary>>,
             Msg_Enc = enacl:secretbox(Msg, Sec_Nonce, Secret),
