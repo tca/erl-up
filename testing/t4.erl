@@ -1,6 +1,7 @@
 -module(t4).
 -compile(export_all).
 
+%error on different size
 bin_bxor(Bin1, Bin2) ->
     Sz1 = size(Bin1)*8,
     Sz2 = size(Bin2)*8,
@@ -81,9 +82,10 @@ run_bob1(Alice, Alice_EPubk, ESeck, Bob_Secret, Bob_Commit_Key, Nonce) ->
             Package1_Enc = enacl:box(Package1, Nonce1, Alice_EPubk, ESeck),
             Alice ! Package1_Enc,
 
+            % start secret key session
             Secret = bin_bxor(Alice_Secret, Bob_Secret),
             io:format("secret: ~p~n", [Secret]),
-            run_bob2(Secret, Sec_Nonce, Bob_Commit_Key)
+            run_bob2(Alice, Secret, Sec_Nonce, Sec_Nonce1, Bob_Commit_Key)
     end.
 
 run_alice2(Bob, ESeck, Bob_EPubk, Bob_Commit, Alice_Secret, Sec_Nonce, Nonce1) ->
@@ -97,24 +99,49 @@ run_alice2(Bob, ESeck, Bob_EPubk, Bob_Commit, Alice_Secret, Sec_Nonce, Nonce1) -
               Bob_Commit_Key_Size:32,
               Bob_Commit_Key:Bob_Commit_Key_Size/binary>> = Package1,
             Bob_Commit = enacl:hash(<<Bob_EPubk/binary, Bob_Secret/binary, Bob_Commit_Key/binary>>),
+
             Secret = bin_bxor(Alice_Secret, Bob_Secret),
-            io:format("secret: ~p~n", [Secret]),
             Sec_Nonce2 = enacl:randombytes(enacl:secretbox_nonce_size()),
+            io:format("secret: ~p~n", [Secret]),
             Msg = <<Bob_Commit_Key:8/binary, Sec_Nonce2:SECRETBOX_NONCE_SIZE/binary>>,
             Msg_Enc = enacl:secretbox(Msg, Sec_Nonce, Secret),
             Bob ! Msg_Enc,
-            exit(done)
+            chat_loop(Bob, Secret, Sec_Nonce2, Sec_Nonce1)
     end.
 
-run_bob2(Secret, Sec_Nonce, Bob_Commit_Key) ->
+run_bob2(Alice, Secret, Sec_Nonce, Sec_Nonce1, Bob_Commit_Key) ->
     SECRETBOX_NONCE_SIZE = enacl:secretbox_nonce_size(),
     receive
         Msg_Enc ->
             {ok, Msg} = enacl:secretbox_open(Msg_Enc, Sec_Nonce, Secret),
             <<Bob_Commit_Key:8/binary, Sec_Nonce2:SECRETBOX_NONCE_SIZE/binary>> = Msg,
-            io:format("ok!~n")
-    end,
-    exit(done).
+            io:format("ok!~n"),
+            chat_loop(Alice, Secret, Sec_Nonce1, Sec_Nonce2)
+    end.
+
+chat_loop(Bob, Secret, Alice_Nonce, Bob_Nonce) ->
+    spawn(fun() -> send_loop(Bob, Secret, Alice_Nonce) end),
+    recv_loop(Bob, Secret, Bob_Nonce).
+
+send_loop(Bob, Secret, Nonce) ->
+    SECRETBOX_NONCE_SIZE = enacl:secretbox_nonce_size(),
+    Msg = list_to_binary(io:get_line("> ")),
+
+    Nonce1 = enacl:randombytes(enacl:secretbox_nonce_size()),
+    Package = <<Nonce1:SECRETBOX_NONCE_SIZE/binary, Msg/binary>>,
+    Package_Enc = enacl:secretbox(Package, Nonce, Secret),
+    Bob ! Package_Enc,
+    send_loop(Bob, Secret, Nonce1).
+
+recv_loop(Bob, Secret, Nonce) ->
+    SECRETBOX_NONCE_SIZE = enacl:secretbox_nonce_size(),
+    receive
+        Package_Enc ->
+            {ok, Package} = enacl:secretbox_open(Package_Enc, Nonce, Secret),
+            <<Nonce1:SECRETBOX_NONCE_SIZE/binary, Msg/binary>> = Package,
+            io:format("> ~s~n", [binary_to_list(Msg)]),
+            recv_loop(Bob, Secret, Nonce1)
+    end.
 
 run() ->
     Alice = spawn(fun() -> run_alice() end),
